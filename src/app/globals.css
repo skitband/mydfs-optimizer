@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
+/* Telegram Web-inspired design tokens */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --tg-primary: #3390ec;
+  --tg-primary-hover: #2a7fd4;
+  --tg-on-primary: #ffffff;
+  --tg-bg: #ffffff;
+  --tg-surface: #f4f4f5;
+  --tg-elevated: #ffffff;
+  --tg-text: #000000;
+  --tg-muted: #707579;
+  --tg-border: #dfe1e5;
+  --tg-bubble-in: #ffffff;
+  --tg-bubble-out: #eeffde;
+  --tg-bubble-out-text: #000000;
+  --tg-bubble-out-meta: #4fae4e;
+  --tg-danger: #e53935;
+  --tg-success: #4fae4e;
+  --tg-warning: #f0a300;
+  --tg-chip: rgba(0, 0, 0, 0.06);
+  --tg-date-pill: rgba(76, 116, 70, 0.55);
+  --tg-shadow: 0 1px 2px rgba(16, 35, 47, 0.15);
+  --tg-pattern-opacity: 0.22;
+  --tg-wallpaper:
+    radial-gradient(circle at 12% 18%, #d5d88d 0%, transparent 48%),
+    radial-gradient(circle at 88% 12%, #88b884 0%, transparent 46%),
+    radial-gradient(circle at 82% 88%, #dbddbb 0%, transparent 50%),
+    radial-gradient(circle at 18% 86%, #6ba587 0%, transparent 52%),
+    #b9c99a;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --tg-primary: #8774e1;
+  --tg-primary-hover: #7b68d6;
+  --tg-on-primary: #ffffff;
+  --tg-bg: #212121;
+  --tg-surface: #2c2c2c;
+  --tg-elevated: #2a2a2a;
+  --tg-text: #ffffff;
+  --tg-muted: #aaaaaa;
+  --tg-border: #0f0f0f;
+  --tg-bubble-in: #212121;
+  --tg-bubble-out: #8774e1;
+  --tg-bubble-out-text: #ffffff;
+  --tg-bubble-out-meta: rgba(255, 255, 255, 0.65);
+  --tg-danger: #ff595a;
+  --tg-success: #5cc85e;
+  --tg-warning: #ffc04d;
+  --tg-chip: rgba(255, 255, 255, 0.08);
+  --tg-date-pill: rgba(0, 0, 0, 0.4);
+  --tg-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --tg-pattern-opacity: 0.12;
+  --tg-wallpaper:
+    radial-gradient(circle at 12% 18%, #3d3a5c 0%, transparent 48%),
+    radial-gradient(circle at 88% 12%, #2b4057 0%, transparent 46%),
+    radial-gradient(circle at 82% 88%, #46345a 0%, transparent 50%),
+    radial-gradient(circle at 18% 86%, #23474a 0%, transparent 52%),
+    #0f0f0f;
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-tg-primary: var(--tg-primary);
+  --color-tg-primary-hover: var(--tg-primary-hover);
+  --color-tg-on-primary: var(--tg-on-primary);
+  --color-tg-bg: var(--tg-bg);
+  --color-tg-surface: var(--tg-surface);
+  --color-tg-elevated: var(--tg-elevated);
+  --color-tg-text: var(--tg-text);
+  --color-tg-muted: var(--tg-muted);
+  --color-tg-border: var(--tg-border);
+  --color-tg-bubble-in: var(--tg-bubble-in);
+  --color-tg-bubble-out: var(--tg-bubble-out);
+  --color-tg-bubble-out-text: var(--tg-bubble-out-text);
+  --color-tg-bubble-out-meta: var(--tg-bubble-out-meta);
+  --color-tg-danger: var(--tg-danger);
+  --color-tg-success: var(--tg-success);
+  --color-tg-warning: var(--tg-warning);
+  --color-tg-chip: var(--tg-chip);
+  --color-tg-date-pill: var(--tg-date-pill);
+  --shadow-tg: var(--tg-shadow);
+  --font-sans: var(--font-roboto), -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tg-wallpaper {
+  position: relative;
+  background: var(--tg-wallpaper);
+  isolation: isolate;
+}
+
+.tg-wallpaper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: var(--tg-pattern-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='30' cy='30' r='14'/%3E%3Cpath d='M16 30h28M30 16v28M20 20c6 6 6 14 0 20M40 20c-6 6-6 14 0 20'/%3E%3Cpath d='M105 22l4 9 10 1-7 7 2 10-9-5-9 5 2-10-7-7 10-1z'/%3E%3Cpath d='M70 95h30M74 95l4 22h14l4-22M78 103h14M80 111h10'/%3E%3Crect x='112' y='92' width='26' height='18' rx='3'/%3E%3Cpath d='M18 118c8-10 18-10 26 0M24 128h14'/%3E%3Cpath d='M60 52c4-4 10-4 14 0s10 4 14 0'/%3E%3Ccircle cx='135' cy='140' r='4'/%3E%3Ccircle cx='60' cy='145' r='3'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+:root[data-theme="dark"] .tg-wallpaper::before {
+  filter: invert(1);
+}
+
+.tg-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--tg-muted) 45%, transparent) transparent;
+}
+
+/* Incoming / outgoing bubble tails */
+.tg-bubble-in-tail,
+.tg-bubble-out-tail {
+  position: relative;
+}
+.tg-bubble-in-tail::after,
+.tg-bubble-out-tail::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 11px;
+  height: 20px;
+  background: inherit;
+}
+.tg-bubble-in-tail::after {
+  left: -8px;
+  clip-path: path("M11 0 V20 H0 C5 18 9 14 11 0 Z");
+}
+.tg-bubble-out-tail::after {
+  right: -8px;
+  clip-path: path("M0 0 V20 H11 C6 18 2 14 0 0 Z");
+}
+
+@keyframes tg-typing {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+.tg-typing-dot {
+  animation: tg-typing 1.2s infinite ease-in-out;
+}
+
+@keyframes tg-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.tg-pop {
+  animation: tg-pop 0.2s ease-out both;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

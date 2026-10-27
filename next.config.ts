@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  serverExternalPackages: ["highs"],
+  outputFileTracingIncludes: {
+    "/api/optimize": ["./node_modules/highs/build/highs.wasm"],
+  },
   turbopack: {
     rules: {
       "*.css": {

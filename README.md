@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lineup Bot — Yahoo NBA DFS Lineup Optimizer
 
-## Getting Started
+A Telegram-inspired web app that builds optimal **Yahoo Daily Fantasy NBA** lineups from live Yahoo salaries,
+projections and injury statuses.
 
-First, run the development server:
+Built with Next.js 16 (App Router), React 19, Tailwind CSS 4 and TanStack Query 5.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+```bash
+npm run build && npm start   # production
+npm run lint
+npx tsc --noEmit
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+No API keys are required.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Data source
 
-## Learn More
+Yahoo Daily Fantasy exposes public, read-only JSON endpoints (the same ones its own web app uses). The app proxies
+them through Next.js route handlers (cached in memory for 60 s):
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Upstream |
+| --- | --- |
+| `GET /api/slates` | `https://dfyql-ro.sports.yahoo.com/v2/contestsFilteredWeb?sport=nba` — upcoming multi-game contests, grouped into slates by `seriesId` |
+| `GET /api/slates/:contestId/players` | `https://dfyql-ro.sports.yahoo.com/v2/contestPlayers?contestId=…` — salaries, eligible positions, Yahoo projections, FPPG, injury status, Vegas lines |
+| `POST /api/optimize` | Lineup solver (runs on the server) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+These endpoints are unofficial and may change without notice.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Yahoo NBA rules enforced
 
-## Deploy on Vercel
+- 8 slots: **PG, SG, G (PG/SG), SF, PF, F (SF/PF), C, UTIL**
+- **$200** salary cap
+- Players from at least **3 teams**, at most **6** from one team (configurable lower)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Optimizer
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`src/lib/lineup-search.ts` is an exact best-first search: a DP table bounds the best possible completion for any
+partial lineup, and a DFS enumerates every valid lineup within a widening window of the optimum. Lineups are produced
+sequentially — each is the highest-projected lineup that satisfies the rules, locks, exposure caps and the
+"min unique players" constraint against all previous lineups. Typical runs take well under a second for 50 lineups.
+
+For extreme settings where enumeration would explode, it falls back to an exact MILP solved with
+[HiGHS](https://highs.dev) (WebAssembly, `highs` package).
+
+Features: lock / exclude players, edit projections, Yahoo projection or season FPPG, skip injured (O/INJ), number of
+lineups (1–50), min unique players, max exposure, max per team, projection randomness for GPP variety, copy lineups,
+CSV export, light/dark (Night Mode) themes.
+
+## Project layout
+
+```
+src/app/                 routes (page, layout, API route handlers)
+src/components/          Telegram-style UI (sidebar, chat, composer, player pool)
+src/hooks/               TanStack Query hooks, workspace state
+src/lib/                 Yahoo client, optimizer, shared types
+```
