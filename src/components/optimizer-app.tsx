@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Player } from "@/lib/types";
 import { formatDay, isOut } from "@/lib/format";
 import { usePlayers, useOptimize, useSlates } from "@/hooks/queries";
 import { useEscape } from "@/hooks/use-escape";
+import { rememberSlates, useSlateHistory } from "@/hooks/use-history";
 import {
   DEFAULT_SETTINGS,
   newMessageId,
@@ -13,7 +14,8 @@ import {
   type LineupPlayer,
   type Settings,
 } from "@/hooks/use-workspace";
-import { Sidebar } from "./sidebar";
+import { Sidebar, type SidebarTab } from "./sidebar";
+import { SlateHistory } from "./slate-history";
 import { PlayerPool } from "./player-pool";
 import { Composer } from "./composer";
 import { DatePill, MessageView, TypingBubble, WelcomeMessage } from "./messages";
@@ -25,6 +27,8 @@ const isXl = () => window.matchMedia("(min-width: 1280px)").matches;
 export function OptimizerApp() {
   const slatesQuery = useSlates();
   const [selectedId, setSelectedId] = useState<string>();
+  const [tab, setTab] = useState<SidebarTab>("upcoming");
+  const [historyId, setHistoryId] = useState<string>();
   const [mobileChat, setMobileChat] = useState(false);
   const [poolOpen, setPoolOpen] = useState<boolean | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -35,6 +39,18 @@ export function OptimizerApp() {
 
   const slates = slatesQuery.data;
   const slate = slates?.find((s) => s.id === selectedId) ?? slates?.[0];
+
+  const history = useSlateHistory();
+  useEffect(() => {
+    if (slates) rememberSlates(slates);
+  }, [slates]);
+  const pastSlates = useMemo(() => {
+    if (!slates) return [];
+    const upcoming = new Set(slates.map((s) => s.id));
+    return history.filter((h) => !upcoming.has(h.id));
+  }, [history, slates]);
+  const pastSlate = pastSlates.find((h) => h.id === historyId) ?? pastSlates[0];
+  const showHistory = tab === "history";
   const playersQuery = usePlayers(slate?.contestId);
   const players = useMemo(() => playersQuery.data?.players ?? [], [playersQuery.data]);
   const games = playersQuery.data?.games ?? slate?.games ?? [];
@@ -190,11 +206,15 @@ export function OptimizerApp() {
     <div className="relative flex h-dvh overflow-hidden">
       <Sidebar
         slates={slates}
+        history={pastSlates}
+        tab={tab}
+        onTabChange={setTab}
         isLoading={slatesQuery.isPending}
         error={slatesQuery.error}
-        selectedId={slate?.id}
+        selectedId={showHistory ? pastSlate?.id : slate?.id}
         onSelect={(id) => {
-          setSelectedId(id);
+          if (showHistory) setHistoryId(id);
+          else setSelectedId(id);
           setMobileChat(true);
           setSettingsOpen(false);
         }}
@@ -203,7 +223,13 @@ export function OptimizerApp() {
       />
 
       <main className={cx("tg-wallpaper min-w-0 flex-1 flex-col", mobileChat ? "flex" : "hidden md:flex")}>
-        {slate ? (
+        {showHistory ? (
+          pastSlate ? (
+            <SlateHistory key={pastSlate.id} slate={pastSlate} onBack={() => setMobileChat(false)} />
+          ) : (
+            <EmptyState>{slatesQuery.isPending ? "Loading slates…" : "No past slates yet"}</EmptyState>
+          )
+        ) : slate ? (
           <>
             <header className="z-10 flex h-14 shrink-0 items-center gap-2 border-b border-tg-border bg-tg-bg px-2 sm:px-4">
               <IconButton aria-label="Back to slates" className="md:hidden" onClick={() => setMobileChat(false)}>
@@ -279,15 +305,11 @@ export function OptimizerApp() {
             />
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <span className="rounded-full bg-tg-date-pill px-3 py-1 text-sm font-medium text-white">
-              {slatesQuery.isPending ? "Loading slates…" : "Select a slate to start optimizing"}
-            </span>
-          </div>
+          <EmptyState>{slatesQuery.isPending ? "Loading slates…" : "Select a slate to start optimizing"}</EmptyState>
         )}
       </main>
 
-      {slate && (
+      {slate && !showHistory && (
         <PlayerPool
           players={players}
           isLoading={playersQuery.isPending}
@@ -308,6 +330,14 @@ export function OptimizerApp() {
           )}
         />
       )}
+    </div>
+  );
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-1 items-center justify-center">
+      <span className="rounded-full bg-tg-date-pill px-3 py-1 text-sm font-medium text-white">{children}</span>
     </div>
   );
 }

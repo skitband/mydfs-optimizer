@@ -29,6 +29,7 @@ them through Next.js route handlers (cached in memory for 60 s):
 | --- | --- |
 | `GET /api/slates` | `https://dfyql-ro.sports.yahoo.com/v2/contestsFilteredWeb?sport=nba` — upcoming multi-game contests, grouped into slates by `seriesId` |
 | `GET /api/slates/:contestId/players` | `https://dfyql-ro.sports.yahoo.com/v2/contestPlayers?contestId=…` — salaries, eligible positions, Yahoo projections, FPPG, injury status, Vegas lines |
+| `GET /api/history/:seriesId?contests=…` | `series/:id`, `contestPlayers` (actual `points`), `contestEntries` + `contestEntry/:id` — final scores, perfect lineup (solved on actual points) and the top-scoring entry across the given contests |
 | `POST /api/optimize` | Lineup solver (runs on the server) |
 
 These endpoints are unofficial and may change without notice.

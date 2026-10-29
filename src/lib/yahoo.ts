@@ -1,15 +1,31 @@
 import "server-only";
-import type { Game, Player, Position, Slate } from "./types";
+import { optimize } from "./optimizer";
+import {
+  MAX_PER_TEAM,
+  SALARY_CAP,
+  SLOTS,
+  type Game,
+  type LineupSpot,
+  type Player,
+  type Position,
+  type ResultPlayer,
+  type ScoredGame,
+  type Slate,
+  type SlateResult,
+  type Slot,
+} from "./types";
 
 const BASE = "https://dfyql-ro.sports.yahoo.com/v2";
 const COMMON = "lang=en-US&region=US&device=desktop";
 const TTL_MS = 60_000;
+const FINAL_TTL_MS = 6 * 60 * 60_000;
 const VALID_POSITIONS = new Set<Position>(["PG", "SG", "SF", "PF", "C"]);
+const VALID_SLOTS = new Set<string>(SLOTS);
 
 type CacheEntry = { expires: number; value: Promise<unknown> };
 const cache = new Map<string, CacheEntry>();
 
-async function getJson<T>(url: string): Promise<T> {
+async function getJson<T>(url: string, ttl = TTL_MS): Promise<T> {
   const hit = cache.get(url);
   if (hit && hit.expires > Date.now()) return hit.value as Promise<T>;
 
@@ -21,7 +37,7 @@ async function getJson<T>(url: string): Promise<T> {
     return res.json() as Promise<T>;
   });
 
-  cache.set(url, { expires: Date.now() + TTL_MS, value });
+  cache.set(url, { expires: Date.now() + ttl, value });
   value.catch(() => cache.delete(url));
   return value;
 }
@@ -60,6 +76,7 @@ type YahooPlayer = {
   };
   salary: number;
   projectedPoints: number | null;
+  points?: number | null;
   fantasyPointsPerGame: number | null;
   starting: string;
   primaryPosition: string;
@@ -150,9 +167,151 @@ export async function getSlates(): Promise<Slate[]> {
         biggestPrize: Math.max(...list.map((c) => c.paidTotalPrize?.value ?? 0)),
         games,
         playerCount: players.length,
+        contestIds: list.map((c) => c.id),
       } satisfies Slate;
     }),
   );
 
   return slates.sort((a, b) => a.startTime - b.startTime);
+}
+
+type YahooSeries = {
+  id: number;
+  sportCode: string;
+  state: string;
+  salaryCapOverride: number | null;
+  games: {
+    id: string;
+    homeTeam: YahooTeamRef;
+    awayTeam: YahooTeamRef;
+    homeScore?: number | null;
+    awayScore?: number | null;
+    status?: string;
+  }[];
+};
+
+type YahooSeriesResponse = { series: { result: YahooSeries[] } };
+
+type YahooEntry = {
+  id: number;
+  contestId: number;
+  seriesId: number;
+  rank: number;
+  score: number;
+  user?: { nickname?: string };
+  lineupSlotList?: { lineupSlot?: { key: string }; player?: { code: string } }[];
+};
+
+type YahooEntriesResponse = {
+  entries: { result: YahooEntry[] };
+  pagination?: { result?: { totalCount?: number } };
+};
+
+const ENTRY_CONCURRENCY = 8;
+
+async function getResultPool(contestIds: number[], gameCodes: Set<string>, ttl: number) {
+  // Any contest in the series exposes actual points, even canceled ones; try a few in case some fail.
+  for (const id of contestIds.slice(0, 5)) {
+    const data = await getJson<YahooPlayersResponse>(`${BASE}/contestPlayers?${COMMON}&contestId=${id}`, ttl).catch(
+      () => null,
+    );
+    const pool = (data?.players?.result ?? []).flatMap((raw): ResultPlayer[] => {
+      const p = normalizePlayer(raw);
+      if (!p || !gameCodes.has(p.gameCode)) return [];
+      const { id, name, team, opponent, isHome, salary, positions, status, projection } = p;
+      return [{ id, name, team, opponent, isHome, salary, positions, status, projection, points: round(raw.points ?? 0) }];
+    });
+    if (pool.length) return pool;
+  }
+  throw new Error("Could not load player results for this slate");
+}
+
+async function perfectLineup(pool: ResultPlayer[], salaryCap: number) {
+  const { lineups } = await optimize({
+    players: pool.map((p) => ({ id: p.id, team: p.team, salary: p.salary, positions: p.positions, projection: p.points })),
+    locked: [],
+    salaryCap,
+    settings: { lineups: 1, minUnique: 1, maxExposure: 100, maxPerTeam: MAX_PER_TEAM, randomness: 0 },
+  });
+  const lineup = lineups[0];
+  return lineup ? { spots: lineup.spots, salary: lineup.salary, points: round(lineup.projection) } : null;
+}
+
+async function bestEntry(seriesId: number, contestIds: number[], players: Map<string, ResultPlayer>, ttl: number) {
+  const queue = [...contestIds];
+  const tops: (YahooEntry & { entryCount: number })[] = [];
+  await Promise.all(
+    Array.from({ length: ENTRY_CONCURRENCY }, async () => {
+      for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+        const data = await getJson<YahooEntriesResponse>(
+          `${BASE}/contestEntries?${COMMON}&contestId=${id}&start=0&limit=1&sort=rank`,
+          ttl,
+        ).catch(() => null);
+        const entry = data?.entries?.result?.[0];
+        if (entry?.seriesId === seriesId) tops.push({ ...entry, entryCount: data?.pagination?.result?.totalCount ?? 0 });
+      }
+    }),
+  );
+
+  const top = tops.reduce<(typeof tops)[number] | null>((a, b) => (!a || b.score > a.score ? b : a), null);
+  if (!top) return null;
+
+  const [detail, contest] = await Promise.all([
+    getJson<YahooEntriesResponse>(`${BASE}/contestEntry/${top.id}?${COMMON}`, ttl),
+    getJson<YahooContestsResponse>(`${BASE}/contest/${top.contestId}?${COMMON}`, ttl).catch(() => null),
+  ]);
+  const spots = (detail.entries?.result?.[0]?.lineupSlotList ?? []).flatMap((s): LineupSpot[] =>
+    s.lineupSlot && VALID_SLOTS.has(s.lineupSlot.key) && s.player?.code
+      ? [{ slot: s.lineupSlot.key as Slot, playerId: s.player.code }]
+      : [],
+  );
+  if (!spots.length) return null;
+
+  return {
+    spots,
+    salary: spots.reduce((sum, s) => sum + (players.get(s.playerId)?.salary ?? 0), 0),
+    points: round(top.score),
+    user: top.user?.nickname ?? "Unknown",
+    rank: top.rank,
+    entryCount: top.entryCount,
+    contestTitle: contest?.contests?.result?.[0]?.title ?? `Contest ${top.contestId}`,
+  };
+}
+
+export async function getSlateResult(seriesId: number, contestIds: number[]): Promise<SlateResult> {
+  const data = await getJson<YahooSeriesResponse>(`${BASE}/series/${seriesId}?${COMMON}`);
+  const series = data.series?.result?.[0];
+  if (!series || series.sportCode !== "nba") throw new Error(`Series ${seriesId} is not an NBA slate`);
+
+  const final = series.state === "completed";
+  const ttl = final ? FINAL_TTL_MS : TTL_MS;
+  const salaryCap = series.salaryCapOverride ?? SALARY_CAP;
+  const pool = await getResultPool(contestIds, new Set(series.games.map((g) => g.id)), ttl);
+  const byId = new Map(pool.map((p) => [p.id, p]));
+
+  const [perfect, best] = await Promise.all([
+    perfectLineup(pool, salaryCap),
+    bestEntry(seriesId, contestIds, byId, ttl),
+  ]);
+  const used = new Set([...(perfect?.spots ?? []), ...(best?.spots ?? [])].map((s) => s.playerId));
+
+  return {
+    seriesId: String(seriesId),
+    final,
+    salaryCap,
+    games: series.games.map(
+      (g): ScoredGame => ({
+        code: g.id,
+        home: g.homeTeam.abbr,
+        away: g.awayTeam.abbr,
+        homeScore: g.homeScore ?? null,
+        awayScore: g.awayScore ?? null,
+        status: g.status ?? "",
+      }),
+    ),
+    players: Object.fromEntries(pool.filter((p) => used.has(p.id)).map((p) => [p.id, p])),
+    perfect,
+    best,
+    contestsChecked: contestIds.length,
+  };
 }

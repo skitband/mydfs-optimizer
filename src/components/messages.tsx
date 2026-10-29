@@ -8,7 +8,7 @@ import type { ChatMessage, LineupPlayer } from "@/hooks/use-workspace";
 import { StatusBadge, cx } from "./ui";
 import { ChecksIcon, CopyIcon, DownloadIcon, SlidersIcon, UsersIcon } from "./icons";
 
-const BOT_NAME = "Lineup Bot";
+export const BOT_NAME = "Lineup Bot";
 
 export function DatePill({ children }: { children: ReactNode }) {
   return (

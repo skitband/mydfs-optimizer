@@ -25,6 +25,7 @@ export type Slate = {
   biggestPrize: number;
   games: Game[];
   playerCount: number;
+  contestIds: number[];
 };
 
 export type Player = {
@@ -69,6 +70,39 @@ export type Lineup = {
   spots: LineupSpot[];
   salary: number;
   projection: number;
+};
+
+export type ResultPlayer = Pick<
+  Player,
+  "id" | "name" | "team" | "opponent" | "isHome" | "salary" | "positions" | "status" | "projection"
+> & {
+  points: number;
+};
+
+export type ScoredGame = {
+  code: string;
+  home: string;
+  away: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: string;
+};
+
+export type ResultLineup = {
+  spots: LineupSpot[];
+  salary: number;
+  points: number;
+};
+
+export type SlateResult = {
+  seriesId: string;
+  final: boolean;
+  salaryCap: number;
+  games: ScoredGame[];
+  players: Record<string, ResultPlayer>;
+  perfect: ResultLineup | null;
+  best: (ResultLineup & { user: string; rank: number; entryCount: number; contestTitle: string }) | null;
+  contestsChecked: number;
 };
 
 export type OptimizeResponse = {
